@@ -6,6 +6,7 @@ use deno_core::op2;
 use deno_core::ToJsBuffer;
 use image::imageops::FilterType;
 use image::ColorType;
+use image::DynamicImage;
 use image::ImageDecoder;
 use image::Pixel;
 use image::RgbaImage;
@@ -82,9 +83,9 @@ fn op_image_process(
   // ignore 9.
 
   if let Some(premultiply) = args.premultiply {
-    let is_not_premultiplied = image_out.pixels().any(|pixel| {
-      (pixel.0[0].max(pixel.0[1]).max(pixel.0[2])) > (255 * pixel.0[3])
-    });
+    let is_not_premultiplied = image_out
+      .pixels()
+      .any(|pixel| (pixel.0[0].max(pixel.0[1]).max(pixel.0[2])) > pixel.0[3]);
 
     if premultiply {
       if is_not_premultiplied {
@@ -123,20 +124,41 @@ fn op_image_decode_png(#[buffer] buf: &[u8]) -> Result<DecodedPng, AnyError> {
   let (width, height) = png.dimensions();
 
   // TODO(@crowlKats): maybe use DynamicImage https://docs.rs/image/0.24.7/image/enum.DynamicImage.html ?
-  if png.color_type() != ColorType::Rgba8 {
-    return Err(type_error(format!(
-      "Color type '{:?}' not supported",
-      png.color_type()
-    )));
-  }
+  let color_type = png.color_type();
 
   // read_image will assert that the buffer is the correct size, so we need to fill it with zeros
   let mut png_data = vec![0_u8; png.total_bytes() as usize];
 
   png.read_image(&mut png_data)?;
 
+  // see https://en.wikipedia.org/wiki/PNG#Pixel_format
+  let rgba_data = match color_type {
+    ColorType::Rgba8 => png_data,
+    ColorType::Rgb8 => DynamicImage::ImageRgb8(
+      image::RgbImage::from_vec(width, height, png_data).unwrap(),
+    )
+    .to_rgba8()
+    .into_vec(),
+    ColorType::L8 => DynamicImage::ImageLuma8(
+      image::GrayImage::from_vec(width, height, png_data).unwrap(),
+    )
+    .to_rgba8()
+    .into_vec(),
+    ColorType::La8 => DynamicImage::ImageLumaA8(
+      image::GrayAlphaImage::from_vec(width, height, png_data).unwrap(),
+    )
+    .to_rgba8()
+    .into_vec(),
+    _ => {
+      return Err(type_error(format!(
+        "Color type '{:?}' not supported",
+        color_type
+      )))
+    }
+  };
+
   Ok(DecodedPng {
-    data: png_data.into(),
+    data: rgba_data.into(),
     width,
     height,
   })

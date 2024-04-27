@@ -306,9 +306,9 @@ function processImage(input, width, height, sx, sy, sw, sh, options) {
     outputHeight = heightOfSourceRect;
   }
 
-  if (options.colorSpaceConversion === "none") {
-    throw new TypeError("options.colorSpaceConversion 'none' is not supported");
-  }
+  // if (options.colorSpaceConversion === "none") {
+  //   throw new TypeError("options.colorSpaceConversion 'none' is not supported");
+  // }
 
   /*
    * The cropping works differently than the spec specifies:
